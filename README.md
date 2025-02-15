@@ -1,1 +1,1 @@
-# Bot-ger-ek-
+gerçek zamanlı çalışacak bot
