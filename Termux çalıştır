@@ -1,0 +1,60 @@
+import ccxt
+import yfinance as yf
+import ta
+import time
+
+# 📌 Binance API Anahtarları (Testnet Kullanımı)
+BINANCE_API_KEY = "70545197030f91dcd85316478ef03e15fdf565514a0bfcd6afe915dc93b0c69b"
+BINANCE_API_SECRET = "8c403fbf9b9bdd003bc38a7162f89b96f8f97a3df48244a542685023dc9b2033"
+
+exchange = ccxt.binance({
+    "apiKey": BINANCE_API_KEY,
+    "secret": BINANCE_API_SECRET,
+    "options": {"defaultType": "future"},
+    "urls": {"api": {"public": "https://testnet.binancefuture.com/fapi/v1", "private": "https://testnet.binancefuture.com/fapi/v1"}}
+})
+
+# 📌 Piyasa Verilerini Çekme
+def fetch_market_data():
+    data = yf.download("BTC-USD", period="1d", interval="1h")
+    data["SMA_50"] = data["Close"].rolling(window=50).mean()
+    data["SMA_200"] = data["Close"].rolling(window=200).mean()
+    return data
+
+# 📌 AI Destekli Ticaret Stratejisi
+def ai_trading_strategy():
+    data = fetch_market_data()
+    last_price = data["Close"].iloc[-1]
+    
+    if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
+        decision = "LONG"
+    elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
+        decision = "SHORT"
+    else:
+        decision = "NEUTRAL"
+
+    stop_loss = last_price * 0.98  
+    take_profit = last_price * 1.05  
+    return decision, stop_loss, take_profit
+
+# 📌 Binance Testnet Üzerinde İşlem Açma
+def real_time_test():
+    print("🚀 Binance Testnet AI Botu Başlatıldı...")
+    
+    while True:
+        decision, stop_loss, take_profit = ai_trading_strategy()
+        last_price = fetch_market_data()["Close"].iloc[-1]
+        
+        if decision == "LONG":
+            order = exchange.create_market_buy_order("BTC/USDT", 0.01)
+            print(f"📈 LONG işlem açıldı! Fiyat: {last_price}, Stop-Loss: {stop_loss}, Take-Profit: {take_profit}")
+        elif decision == "SHORT":
+            order = exchange.create_market_sell_order("BTC/USDT", 0.01)
+            print(f"📉 SHORT işlem açıldı! Fiyat: {last_price}, Stop-Loss: {stop_loss}, Take-Profit: {take_profit}")
+        else:
+            print("⏳ AI henüz işlem yapmadı. Bekleniyor...")
+
+        time.sleep(60)
+
+# 📌 Testi Başlat
+real_time_test()
