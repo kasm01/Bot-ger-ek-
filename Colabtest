@@ -1,0 +1,26 @@
+import ccxt
+
+# 📌 Binance Testnet API Anahtarlarınızı Buraya Girin
+BINANCE_API_KEY = "70545197030f91dcd85316478ef03e15fdf565514a0bfcd6afe915dc93b0c69b"
+BINANCE_API_SECRET = "8c403fbf9b9bdd003bc38a7162f89b96f8f97a3df48244a542685023dc9b2033"
+
+# 📌 Binance Testnet Bağlantısı
+exchange = ccxt.binance({
+    "apiKey": BINANCE_API_KEY,
+    "secret": BINANCE_API_SECRET,  # Fazladan tırnak işareti kaldırıldı
+    "options": {"defaultType": "future"},
+    "urls": {
+        "api": {
+            "public": "https://testnet.binancefuture.com/fapi/v1",
+            "private": "https://testnet.binancefuture.com/fapi/v1"
+        }
+    }
+})
+
+# 📌 API Bağlantısını Test Etme
+try:
+    balance = exchange.fetch_balance()
+    print("✅ Binance Testnet Bağlantısı Başarılı!")
+    print(balance)  # Hesap bakiyesini yazdır
+except Exception as e:
+    print(f"❌ Hata: {e}")  # Girinti hatası giderildi
