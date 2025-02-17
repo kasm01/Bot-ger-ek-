@@ -1,0 +1,131 @@
+# 📌 1️⃣ Gerekli Kütüphaneleri Yükleyelim
+!pip install -q xgboost lightgbm numpy pandas scikit-learn tensorflow torch transformers ta yfinance
+
+# 📌 2️⃣ Kütüphaneleri İçeri Aktaralım
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+import torch
+import ta  # Teknik analiz için
+import yfinance as yf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from sklearn.ensemble import IsolationForest
+from xgboost import XGBRegressor
+from sklearn.preprocessing import MinMaxScaler
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+# 📌 3️⃣ Binance Piyasa Verilerini Çekme ve Teknik Göstergeleri Hesaplama
+def fetch_market_data():
+    """BTC fiyatlarını çeker ve teknik göstergeleri ekler"""
+    data = yf.download("BTC-USD", start="2022-01-01", end="2024-01-01")
+
+    # 📌 3.1 Teknik Göstergeler (Trend, Momentum, Volatilite)
+    data["SMA_50"] = data["Close"].rolling(window=50).mean()
+    data["SMA_200"] = data["Close"].rolling(window=200).mean()
+    data["RSI"] = ta.momentum.RSIIndicator(data["Close"], window=14).rsi()
+    macd = ta.trend.MACD(data["Close"])
+    data["MACD"] = macd.macd()
+    data["MACD_Signal"] = macd.macd_signal()
+    bb = ta.volatility.BollingerBands(data["Close"], window=20, window_dev=2)
+    data["Bollinger_Upper"] = bb.bollinger_hband()
+    data["Bollinger_Lower"] = bb.bollinger_lband()
+    data["VWAP"] = ta.volume.VolumeWeightedAveragePrice(data["High"], data["Low"], data["Close"], data["Volume"], window=14).volume_weighted_average_price()
+
+    # 📌 3.2 Short Stratejileri (Bearish Engulfing, Death Cross, Volume Breakdown)
+    data["Bearish_Engulfing"] = (data["Close"].shift(1) > data["Open"].shift(1)) & (data["Close"] < data["Open"]) & (data["Close"] < data["Open"].shift(1))
+    data["Volume_Downtrend"] = (data["Volume"].rolling(5).mean() > data["Volume"])
+
+    # Eksik verileri doldurma
+    data.fillna(0, inplace=True)
+
+    return data
+
+# 📌 4️⃣ AI Modeli: LSTM ve XGBoost ile Fiyat Tahmini
+def train_lstm(data):
+    """LSTM modelini eğitir"""
+    X_train, y_train = [], []
+    for i in range(60, len(data)):
+        X_train.append(data[i-60:i])
+        y_train.append(data[i, 0])
+    X_train, y_train = np.array(X_train), np.array(y_train)
+
+    lstm_model = Sequential([
+        LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        Dropout(0.2),
+        LSTM(50),
+        Dense(1)
+    ])
+    lstm_model.compile(optimizer="adam", loss="mean_squared_error")
+    lstm_model.fit(X_train, y_train, epochs=5, batch_size=32, verbose=1)
+    return lstm_model
+
+def train_xgboost(data):
+    """XGBoost modelini eğitir"""
+    X_train, y_train = [], []
+    for i in range(60, len(data)):
+        X_train.append(data[i-60:i].flatten())
+        y_train.append(data[i, 0])
+    X_train, y_train = np.array(X_train), np.array(y_train)
+
+    xgb_model = XGBRegressor(n_estimators=200)
+    xgb_model.fit(X_train, y_train)
+    return xgb_model
+
+# 📌 5️⃣ Risk Yönetimi: Stop-Loss ve Take-Profit Hesaplama
+def risk_management(entry_price, risk_factor=0.02, reward_factor=0.05):
+    """Stop-Loss ve Take-Profit hesaplar"""
+    stop_loss = entry_price * (1 - risk_factor)
+    take_profit = entry_price * (1 + reward_factor)
+    return stop_loss, take_profit
+
+# 📌 6️⃣ Short Stratejileri (Death Cross, Bearish Engulfing, Volume Breakdown)
+def short_strategy_decision(data):
+    """Short sinyalleri belirler"""
+    last_row = data.iloc[-1]
+    short_signals = []
+    if last_row["SMA_50"] < last_row["SMA_200"]:
+        short_signals.append("SHORT")
+    if last_row["Bearish_Engulfing"]:
+        short_signals.append("SHORT")
+    if last_row["Volume_Downtrend"]:
+        short_signals.append("SHORT")
+    if last_row["Close"] > last_row["Bollinger_Upper"]:
+        short_signals.append("SHORT")
+
+    return "SHORT" if short_signals.count("SHORT") > 1 else "NEUTRAL"
+
+# 📌 7️⃣ AI Destekli Ticaret Stratejisi
+def ai_trading_strategy():
+    """AI Modeli + Short Stratejileri ile işlem kararları verir"""
+    data = fetch_market_data()
+    lstm_model = train_lstm(data)
+    xgb_model = train_xgboost(data)
+    
+    # AI Tahmini
+    lstm_pred = lstm_model.predict(np.array([data[-60:]]))[0][0]
+    xgb_pred = xgb_model.predict(np.array([data[-60:].flatten()]))[0]
+
+    # Short Strateji Kararı
+    short_signal = short_strategy_decision(data)
+
+    # Nihai Karar
+    signals = [lstm_pred, xgb_pred, short_signal]
+    long_count = signals.count("LONG")
+    short_count = signals.count("SHORT")
+
+    decision = "NEUTRAL"
+    if long_count > short_count:
+        decision = "LONG"
+    elif short_count > long_count:
+        decision = "SHORT"
+
+    # Stop-Loss & Take-Profit
+    last_price = data["Close"].iloc[-1]
+    stop_loss, take_profit = risk_management(last_price)
+
+    return decision, stop_loss, take_profit
+
+# 📌 8️⃣ AI Modeli Testi
+decision, stop_loss, take_profit = ai_trading_strategy()
+print(f"📈 AI Kararı: {decision}, 🛑 Stop-Loss: {stop_loss}, 🎯 Take-Profit: {take_profit}")
